@@ -4,13 +4,15 @@ pipeline {
     environment {
         GITLAB_TOKEN = credentials('gitlab-token')
         GITHUB_TOKEN = credentials('github-token')
+        GITLAB_PROJECT_ID = '<YOUR_PROJECT_ID>'
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/Manjunath-Kapanaiah/fraud-detection_Task3.git'
+                git branch: 'main',
+                    url: 'https://github.com/Manjunath-Kapanaiah/fraud-detection_Task3.git'
             }
         }
 
@@ -21,7 +23,8 @@ pipeline {
                         waitUntil {
                             def response = sh(
                                 script: """
-                                curl --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" https://gitlab.com/api/v4/projects/80702349/pipelines?per_page=1
+                                curl --silent --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+                                https://gitlab.com/api/v4/projects/${GITLAB_PROJECT_ID}/pipelines?per_page=1
                                 """,
                                 returnStdout: true
                             ).trim()
@@ -33,39 +36,46 @@ pipeline {
             }
         }
 
-        stage('Verify Kubernetes') {
+        stage('Verify Kubernetes Cluster') {
             steps {
                 sh 'kubectl get nodes'
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy Fraud Detection') {
             steps {
                 sh 'kubectl apply -f fraud-deployment.yaml'
             }
         }
 
-        stage('Trigger GitHub Actions') {
+        stage('Trigger GitHub Transaction Service') {
             steps {
                 sh """
-                curl -X POST -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/actions/workflows/deploy.yml/dispatches -d '{"ref":"main"}'
+                curl -X POST \
+                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/actions/workflows/deploy.yml/dispatches \
+                -d '{"ref":"main"}'
                 """
             }
         }
 
-        stage('Wait for GitHub Workflow') {
+        stage('Wait for GitHub Workflow Success') {
             steps {
                 script {
                     timeout(time: 5, unit: 'MINUTES') {
                         waitUntil {
                             def result = sh(
                                 script: """
-                                curl -H "Authorization: Bearer ${GITHUB_TOKEN}" https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/actions/runs | jq '.workflow_runs[0].conclusion'
+                                curl --silent \
+                                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                                https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/actions/runs \
+                                | jq -r '.workflow_runs[0].conclusion'
                                 """,
                                 returnStdout: true
                             ).trim()
 
-                            return result.contains("success")
+                            return result == "success"
                         }
                     }
                 }
@@ -76,19 +86,28 @@ pipeline {
     post {
         failure {
             steps {
-                echo "Deployment failed. Rolling back..."
+                echo "❌ Failure detected → Rolling back..."
 
-                sh 'kubectl rollout undo deployment/fraud-detection'
+                sh '''
+                kubectl rollout undo deployment/fraud-detection
+                '''
 
                 sh """
-                curl -X POST -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/issues -d '{"title":"Deployment Failed","body":"Rollback executed","labels":["incident"]}'
+                curl -X POST \
+                -H "Authorization: token ${GITHUB_TOKEN}" \
+                https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/issues \
+                -d '{
+                    "title": "🚨 Deployment Failed",
+                    "body": "Transaction service failed. Rollback executed.",
+                    "labels": ["incident"]
+                }'
                 """
             }
         }
 
         success {
             steps {
-                echo "Pipeline completed successfully"
+                echo "✅ Pipeline completed successfully!"
             }
         }
     }
