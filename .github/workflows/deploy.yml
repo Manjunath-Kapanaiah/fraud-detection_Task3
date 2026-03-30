@@ -11,7 +11,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Simulate Deployment
+    //  - name: Simulate Deployment
+    //    run: |
+      //    echo "Deploying Transaction Service"
+        //  sleep 10
+
+        - name: Simulate Deployment
         run: |
           echo "Deploying Transaction Service"
           sleep 10
