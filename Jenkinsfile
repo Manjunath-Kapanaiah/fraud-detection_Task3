@@ -4,7 +4,7 @@ pipeline {
     environment {
         GITLAB_TOKEN = credentials('gitlab-token')
         GITHUB_TOKEN = credentials('github-token')
-        GITLAB_PROJECT_ID = '80702349'
+        GITLAB_PROJECT_ID = '<YOUR_PROJECT_ID>'
     }
 
     stages {
@@ -48,7 +48,7 @@ pipeline {
             }
         }
 
-        stage('Trigger GitHub Transaction Service') {
+        stage('Trigger GitHub Actions') {
             steps {
                 sh """
                 curl -X POST \
@@ -60,7 +60,7 @@ pipeline {
             }
         }
 
-        stage('Wait for GitHub Workflow Success') {
+        stage('Wait for GitHub Workflow') {
             steps {
                 script {
                     timeout(time: 5, unit: 'MINUTES') {
@@ -84,26 +84,25 @@ pipeline {
     }
 
     post {
-    failure {
-        echo "❌ Failure detected → Rolling back..."
+        failure {
+            echo "❌ Deployment failed → Rolling back..."
 
-        sh 'kubectl rollout undo deployment/fraud-detection'
+            sh 'kubectl rollout undo deployment/fraud-detection'
 
-        sh """
-        curl -X POST \
-        -H "Authorization: token ${GITHUB_TOKEN}" \
-        https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/issues \
-        -d '{
-            "title": "🚨 Deployment Failed",
-            "body": "Transaction service failed. Rollback executed.",
-            "labels": ["incident"]
-        }'
-        """
-    }
+            sh """
+            curl -X POST \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/issues \
+            -d '{
+                "title": "🚨 Deployment Failed",
+                "body": "Transaction service failed. Rollback executed.",
+                "labels": ["incident"]
+            }'
+            """
+        }
 
-    success {
-        echo "✅ Pipeline completed successfully!"
-    }
-}
+        success {
+            echo "✅ Pipeline completed successfully!"
+        }
     }
 }
