@@ -21,7 +21,7 @@ pipeline {
                         waitUntil {
                             def response = sh(
                                 script: """
-                                curl --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" https://gitlab.com/api/v4/projects/<PROJECT_ID>/pipelines?per_page=1
+                                curl --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" https://gitlab.com/api/v4/projects/80702349/pipelines?per_page=1
                                 """,
                                 returnStdout: true
                             ).trim()
