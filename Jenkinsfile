@@ -84,31 +84,26 @@ pipeline {
     }
 
     post {
-        failure {
-            steps {
-                echo "❌ Failure detected → Rolling back..."
+    failure {
+        echo "❌ Failure detected → Rolling back..."
 
-                sh '''
-                kubectl rollout undo deployment/fraud-detection
-                '''
+        sh 'kubectl rollout undo deployment/fraud-detection'
 
-                sh """
-                curl -X POST \
-                -H "Authorization: token ${GITHUB_TOKEN}" \
-                https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/issues \
-                -d '{
-                    "title": "🚨 Deployment Failed",
-                    "body": "Transaction service failed. Rollback executed.",
-                    "labels": ["incident"]
-                }'
-                """
-            }
-        }
+        sh """
+        curl -X POST \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
+        https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/issues \
+        -d '{
+            "title": "🚨 Deployment Failed",
+            "body": "Transaction service failed. Rollback executed.",
+            "labels": ["incident"]
+        }'
+        """
+    }
 
-        success {
-            steps {
-                echo "✅ Pipeline completed successfully!"
-            }
-        }
+    success {
+        echo "✅ Pipeline completed successfully!"
+    }
+}
     }
 }
