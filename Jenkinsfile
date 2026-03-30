@@ -33,14 +33,15 @@ pipeline {
             }
         }
 
+        stage('Verify Kubernetes') {
+            steps {
+                sh 'kubectl get nodes'
+            }
+        }
+
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
-                    sh '''
-                    kubectl get nodes
-                    kubectl apply -f fraud-deployment.yaml
-                    '''
-                }
+                sh 'kubectl apply -f fraud-deployment.yaml'
             }
         }
 
@@ -75,13 +76,9 @@ pipeline {
     post {
         failure {
             steps {
-                echo "Failure detected. Rolling back..."
+                echo "Deployment failed. Rolling back..."
 
-                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
-                    sh '''
-                    kubectl rollout undo deployment/fraud-detection
-                    '''
-                }
+                sh 'kubectl rollout undo deployment/fraud-detection'
 
                 sh """
                 curl -X POST -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/issues -d '{"title":"Deployment Failed","body":"Rollback executed","labels":["incident"]}'
