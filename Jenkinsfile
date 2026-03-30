@@ -1,76 +1,65 @@
 pipeline {
     agent any
+
     environment {
-        // K8s commands are mocked using echo or Docker simulation
-        KUBECTL_CMD = 'echo "kubectl mock command"'
-        DEPLOYMENT_NAME = 'fraud-app'
+        GITLAB_TOKEN = credentials('gitlab-token')
+        GITHUB_TOKEN = credentials('github-token')
     }
 
     stages {
 
-        stage('Checkout Fraud Detection') {
+        stage('Check GitLab Pipeline Status') {
             steps {
-                git branch: 'main', url: 'git@github.com:Manjunath-Kapanaiah/Fraud-Detection.git'
-            }
-        }
-
-        stage('Install Dependencies') {
-            steps {
-                sh '''
-                    # Use Python virtual environment
-                    python3 -m venv venv || echo "venv not created"
-                    source venv/bin/activate || echo "activate venv failed"
-                    pip install -r requirements.txt || echo "pip install skipped"
-                '''
-            }
-        }
-
-        stage('Unit & Integration Tests') {
-            parallel {
-                stage('Unit Tests') {
-                    steps {
-                        sh 'echo "Running unit tests..."'
-                        // Replace actual tests with mock
-                        sh 'sleep 2'
-                    }
-                }
-                stage('Integration Tests') {
-                    steps {
-                        sh 'echo "Running integration tests..."'
-                        // Replace actual integration with mock
-                        sh 'sleep 2'
+                script {
+                    timeout(time: 5, unit: 'MINUTES') {
+                        waitUntil {
+                            def response = sh(
+                                script: """
+                                curl --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+                                https://gitlab.com/api/v4/projects/<PROJECT_ID>/pipelines?per_page=1
+                                """,
+                                returnStdout: true
+                            )
+                            return response.contains('"status":"success"')
+                        }
                     }
                 }
             }
         }
 
-        stage('Deploy (Mock)') {
+        stage('Deploy to Kubernetes') {
             steps {
-                script {
-                    // Instead of real kubectl, we simulate deployment
-                    sh "${env.KUBECTL_CMD} apply -f deployment.yaml || echo 'Mock deploy skipped'"
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh '''
+                    kubectl apply -f fraud-deployment.yaml
+                    '''
                 }
             }
         }
 
-        stage('Trigger Next Pipelines') {
+        stage('Trigger GitHub Actions') {
+            steps {
+                sh """
+                curl -X POST -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/actions/workflows/deploy.yml/dispatches -d '{"ref":"main"}'
+                """
+            }
+        }
+
+        stage('Wait for GitHub Workflow') {
             steps {
                 script {
-                    echo "Triggering GitLab User Auth Pipeline..."
-                    sh """
-                        curl -X POST -H "PRIVATE-TOKEN: token" \
-                        "https://gitlab.com/Manjunath-Kapanaiah/user-auth-service.git" \
-                        || echo 'GitLab trigger mocked'
-                    """
+                    timeout(time: 5, unit: 'MINUTES') {
+                        waitUntil {
+                            def result = sh(
+                                script: """
+                                curl -H "Authorization: Bearer ${GITHUB_TOKEN}" https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/actions/runs | jq -r '.workflow_runs[0].conclusion'
+                                """,
+                                returnStdout: true
+                            ).trim()
 
-                    echo "Triggering GitHub Transaction Service..."
-                    sh """
-                        curl -X POST https://api.github.com/repos/Manjunath-Kapanaiah/transaction-service/dispatches \
-                        -H "Accept: application/vnd.github+json" \
-                        -H "Authorization: Bearer token" \
-                        -d '{"event_type":"fraud-check","client_payload":{"status":"success"}}' \
-                        || echo 'GitHub dispatch mocked'
-                    """
+                            return result == "success"
+                        }
+                    }
                 }
             }
         }
@@ -78,19 +67,25 @@ pipeline {
 
     post {
         failure {
-            echo "Pipeline failed, performing mock rollback..."
-            sh "${env.KUBECTL_CMD} rollout undo deployment/${DEPLOYMENT_NAME} || echo 'Rollback mocked'"
-            
-            echo "Notifying teams via GitHub Issues..."
-            sh """
-                curl -X POST -H "Authorization: token Token" \
-                https://github.com/Manjunath-Kapanaiah/fraud-detection_Task3.git \
-                -d '{"title":"Rollback Alert","body":"Pipeline failed. Fraud Detection rolled back (mock)."}' \
-                || echo 'Issue creation mocked'
-            """
+            steps {
+                echo "Failure detected. Rolling back..."
+
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh '''
+                    kubectl rollout undo deployment/fraud-detection
+                    '''
+                }
+
+                sh """
+                curl -X POST -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/issues -d '{"title":"Deployment Failed","body":"Rollback executed","labels":["incident"]}'
+                """
+            }
         }
+
         success {
-            echo "Pipeline succeeded. No rollback needed."
+            steps {
+                echo "Pipeline completed successfully 🎉"
+            }
         }
     }
 }
