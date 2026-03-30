@@ -4,7 +4,7 @@ pipeline {
     environment {
         GITLAB_TOKEN = credentials('gitlab-token')
         GITHUB_TOKEN = credentials('github-token')
-        GITLAB_PROJECT_ID = '<YOUR_PROJECT_ID>'
+        GITLAB_PROJECT_ID = '80702349'
     }
 
     stages {
