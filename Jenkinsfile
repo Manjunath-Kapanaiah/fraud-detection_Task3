@@ -15,11 +15,11 @@ pipeline {
                         waitUntil {
                             def response = sh(
                                 script: """
-                                curl --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
-                                https://gitlab.com/api/v4/projects/<PROJECT_ID>/pipelines?per_page=1
+                                curl --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" https://gitlab.com/api/v4/projects/<PROJECT_ID>/pipelines?per_page=1
                                 """,
                                 returnStdout: true
-                            )
+                            ).trim()
+
                             return response.contains('"status":"success"')
                         }
                     }
@@ -52,12 +52,12 @@ pipeline {
                         waitUntil {
                             def result = sh(
                                 script: """
-                                curl -H "Authorization: Bearer ${GITHUB_TOKEN}" https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/actions/runs | jq -r '.workflow_runs[0].conclusion'
+                                curl -H "Authorization: Bearer ${GITHUB_TOKEN}" https://api.github.com/repos/Manjunath-Kapanaiah/fraud-detection_Task3/actions/runs | jq '.workflow_runs[0].conclusion'
                                 """,
                                 returnStdout: true
                             ).trim()
 
-                            return result == "success"
+                            return result.contains("success")
                         }
                     }
                 }
@@ -84,7 +84,7 @@ pipeline {
 
         success {
             steps {
-                echo "Pipeline completed successfully 🎉"
+                echo "Pipeline completed successfully"
             }
         }
     }
