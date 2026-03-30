@@ -1,5 +1,5 @@
 pipeline {
-    agent any
+    agent { label 'JENKINS-2' }
 
     environment {
         GITLAB_TOKEN = credentials('gitlab-token')
